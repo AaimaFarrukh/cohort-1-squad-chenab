@@ -1,96 +1,72 @@
-# 🦅 Squad Chenab
-
-> **Comebck Pakistan — Cohort 1 · Product Challenge**
-
----
-
-## 👥 Squad Members
-
-- Younas Sadat
-- Syed muhammad bin javed nazim
-- Aaima Farrukh
-- Muhammad Zain Ehtisham
-
-**GitHub usernames:**
-
-- [@younassadat](https://github.com/younassadat)
-- [@Ehtisham894](https://github.com/Ehtisham894)
-- [@AaimaFarrukh](https://github.com/AaimaFarrukh)
-- [@Smbj082001](https://github.com/Smbj082001)
+# KhataAI — Week 4
+**Comebck Pakistan Cohort 1 | Phase 3 + Phase 4 (built on top of Week 3)**
 
 ---
 
-## 💡 Our Idea
+## Who built what
 
-Our squad picked **[Idea 3 — The Shoebox-to-Books Bookkeeper](https://github.com/Comebck-Pakistan/cohort-1-product-challenge#idea-3--the-shoebox-to-books-bookkeeper)** from the [Cohort 1 Product Challenge](https://github.com/Comebck-Pakistan/cohort-1-product-challenge). Below are our ideation-stage validation answers, reproduced exactly as we submitted them.
+### Week 3 (carried forward)
+| File | Owner |
+|---|---|
+| `app/main.py` | Younas |
+| `app/whatsapp.py` | Younas |
+| `app/gemini_client.py` | Younas |
+| `app/supabase_client.py` | Younas |
+| `app/rate_limit.py` | Younas |
+| `app/whitelist.py` | Aaima |
+| `app/ledger.py` | Aaima |
+| `schema.sql` | Aaima |
 
-### One specific user
-
-A solo seller in Lahore or Islamabad running a clothing, jewelry, or cosmetics business entirely through Instagram DMs and WhatsApp, processing 30–80 orders a month with no system to track who has paid or what her monthly profit is.
-
-### The painful problem
-
-They track every payment from memory and every order through WhatsApp chat history. At the end of the month they have no idea if they made a profit, and they regularly lose money to customers who never paid because they forgot to follow up. Existing tools like QuickBooks require accounting knowledge they don't have and are in English. The pain costs their real money every single month.
-
-### Our 8-week wedge
-
-A WhatsApp-based AI agent that reads forwarded invoice screenshots and receipt photos, maintains a live ledger, and tells the seller exactly who owes their money and what they earned this month: in plain Urdu.
-
-### The one number that proves people want it
-
-5 sellers who forward their real WhatsApp invoices through it get a monthly summary back and say, "Haan, yeh sahi hai," confirming the numbers are accurate enough to trust.
-
-### Why we picked this idea
-
-We can physically reach our users today: Instagram and WhatsApp sellers are findable in minutes by searching any product hashtag. We ran a survey in Week 1 and got 7 real responses: 71% track payments from memory, 57% don't know their monthly profit, and 5 people left their WhatsApp number asking for early access. The problem is daily; the user is reachable, and the market has no serious competitor built for Pakistan yet.
-
----
-
-## 🚀 Getting Started — Clone & Contribute
-
-Follow these steps to get this repo on your machine and start contributing code.
-
-### 1. Prerequisites
-- Install [Git](https://git-scm.com/downloads)
-- A [GitHub account](https://github.com/join) added to the **Comebck-Pakistan** organization
-- _(Recommended)_ [VS Code](https://code.visualstudio.com/) and/or the
-  [GitHub CLI](https://cli.github.com/)
-
-### 2. Clone the repository
-```bash
-git clone https://github.com/Comebck-Pakistan/cohort-1-squad-chenab.git
-cd cohort-1-squad-chenab
-```
-
-### 3. Create a branch for your work
-Never commit straight to `main`. Create a branch for each feature or fix:
-```bash
-git checkout -b your-name/short-description
-```
-
-### 4. Make your changes, then stage and commit them
-```bash
-git add .
-git commit -m "Briefly describe what you changed"
-```
-
-### 5. Push your branch to GitHub
-```bash
-git push -u origin your-name/short-description
-```
-
-### 6. Open a Pull Request
-- Open the repo on GitHub and click **"Compare & pull request"**.
-- Describe your change, request a review from a squadmate, and merge once approved.
-
-### 🔄 Keep your local copy up to date
-Before starting new work, pull the latest `main`:
-```bash
-git checkout main
-git pull origin main
-```
+### Week 4 (new this week)
+| File | Owner | What it does |
+|---|---|---|
+| `app/intent.py` | Younas | Classifies every message into an intent |
+| `app/ledger_query.py` | Younas | Answers earnings questions from real ledger data |
+| `app/voice.py` | Younas | Voice note transcription + classification via Gemini |
+| `app/digest_trigger.py` | Younas | Monthly digest scheduler + manual DIGEST trigger |
+| `app/debtor.py` | Aaima | "Kaun hisaab mein hai?" — unpaid invoice list |
+| `app/fallback.py` | Aaima | Unknown query message |
+| `app/digest_message.py` | Aaima | Monthly Urdu digest content builder |
+| `schema_week4_additions.sql` | Aaima | Week 4 schema additions — run after schema.sql |
 
 ---
 
-> **Every squad member must contribute commits.** The challenge grades a real, honest
-> commit history that shows everyone built. Build in the open, ship the proof. 🚀
+## Setup — Week 4 additions
+
+### 1. Run schema_week4_additions.sql
+In Supabase SQL Editor, run `schema_week4_additions.sql` AFTER `schema.sql` from Week 3.
+
+**Before running the cron job:**
+- Deploy to Railway first to get your live URL
+- Replace `YOUR-RAILWAY-URL` and `YOUR-CRON-SECRET` in the file
+- Then run just the cron.schedule() part
+
+### 2. Enable pg_net extension (needed for digest cron)
+Supabase Dashboard → Database → Extensions → Search `pg_net` → Enable
+
+### 3. Environment variables (no changes from Week 3)
+Same `.env` as Week 3 — no new variables needed.
+
+---
+
+## Full test checklist — Week 4 done when all pass
+
+### Phase 3 — Urdu Chat
+- [ ] Type "is mahine kitna kamaya?" → correct earnings summary in Urdu
+- [ ] Type "kaun hisaab mein hai?" → debtor list or "sab clear hai"
+- [ ] Type "pichle mahine ka hisaab?" → correct previous month summary
+- [ ] Type something random → helpful fallback message
+- [ ] Send a voice note saying an amount → receipt logged correctly
+- [ ] Send a voice note asking "kitna kamaya?" → earnings summary returned
+- [ ] Send a voice note asking about debtors → debtor list returned
+
+### Phase 4 — Monthly Digest
+- [ ] Type "digest" → monthly digest arrives immediately
+- [ ] Digest shows correct income, expense, net profit
+- [ ] Digest shows correct debtor list (or "sab ne payment kar di")
+- [ ] POST /internal/run-digest with correct header → digests sent
+- [ ] POST /internal/run-digest with wrong header → 403 returned
+
+### Week 4 complete when:
+A real seller (not a team member) asks "is mahine kya hua?" and gets
+a correct Urdu summary back without any help from the team.
