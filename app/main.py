@@ -59,18 +59,6 @@ async def run_digest_endpoint(request: Request):
     return {"digests_sent": sent}
 
 
-# ── Phase 1: webhook verification — Younas ──────────────────────────────────
-@app.get("/webhook")
-def verify_webhook(request: Request):
-    mode      = request.query_params.get("hub.mode")
-    token     = request.query_params.get("hub.verify_token")
-    challenge = request.query_params.get("hub.challenge")
-
-    if mode == "subscribe" and token == os.environ["WHATSAPP_VERIFY_TOKEN"]:
-        return Response(content=challenge, media_type="text/plain")
-    return Response(status_code=403)
-
-
 # ── Main webhook handler ─────────────────────────────────────────────────────
 @app.post("/webhook")
 async def receive_message(request: Request):
@@ -244,13 +232,45 @@ def _get_or_create_user(phone_number: str) -> dict:
 
 
 def _extract_message(payload: dict):
+    """
+    Green API sends a completely different webhook shape than Meta's Cloud
+    API. Normalizes it into the same {"type": ..., "text"/"image"/"audio": ...}
+    shape the rest of this file already expects, so nothing downstream
+    (_handle_image, _handle_voice, intent classify) has to change.
+
+    Note: for image/audio, "id" below is actually the Green API downloadUrl,
+    not a media_id — whatsapp.get_media_url() just passes it straight through.
+    """
     try:
-        value    = payload["entry"][0]["changes"][0]["value"]
-        messages = value.get("messages")
-        if not messages:
+        if payload.get("typeWebhook") != "incomingMessageReceived":
             return None, None
-        message      = messages[0]
-        phone_number = message["from"]
-        return message, phone_number
-    except (KeyError, IndexError):
+
+        phone_number = payload["senderData"]["sender"].split("@")[0]
+        message_data = payload["messageData"]
+        type_message = message_data.get("typeMessage")
+
+        if type_message == "textMessage":
+            body = message_data["textMessageData"]["textMessage"]
+            return {"type": "text", "text": {"body": body}}, phone_number
+
+        if type_message == "extendedTextMessage":
+            body = message_data["extendedTextMessageData"]["text"]
+            return {"type": "text", "text": {"body": body}}, phone_number
+
+        if type_message == "imageMessage":
+            file_data = message_data["fileMessageData"]
+            return {
+                "type": "image",
+                "image": {"id": file_data["downloadUrl"], "caption": file_data.get("caption")},
+            }, phone_number
+
+        if type_message == "audioMessage":
+            file_data = message_data["fileMessageData"]
+            return {
+                "type": "audio",
+                "audio": {"id": file_data["downloadUrl"]},
+            }, phone_number
+
+        return None, None
+    except (KeyError, IndexError, TypeError, AttributeError):
         return None, None
