@@ -1,11 +1,14 @@
 """
-KhataAI — Week 3 | WhatsApp Cloud API helper
-Owner: Younas
+KhataAI — WhatsApp helper (Green API)
 
-Handles all outgoing calls to Meta's WhatsApp Business Cloud API:
+Handles all outgoing calls to Green API's WhatsApp instance:
   - Sending text messages back to the seller
-  - Getting the real download URL for a media file (receipts arrive as media_id only)
-  - Downloading the actual image bytes from Meta's CDN
+  - Downloading media bytes
+
+Green API differs from Meta's Cloud API in one big way: incoming webhooks
+already contain the direct downloadUrl for media (image/audio) messages, so
+there's no separate "exchange media_id for a URL" step. get_media_url() is
+kept only so main.py's existing call sites don't need to change.
 """
 
 import os
@@ -14,39 +17,45 @@ import httpx
 
 logger = logging.getLogger("khataai.whatsapp")
 
-# Meta's base URL for the WhatsApp Cloud API
-WHATSAPP_API_URL = "https://graph.facebook.com/v19.0"
+# Green API base URL (same for all instances unless you're on a dedicated server)
+GREEN_API_BASE_URL = os.environ.get("GREEN_API_BASE_URL", "https://api.green-api.com")
 
 
-def _headers() -> dict:
-    """Auth headers for every Meta API call."""
-    return {
-        "Authorization": f"Bearer {os.environ['WHATSAPP_TOKEN']}",
-        "Content-Type": "application/json",
-    }
+def _id_instance() -> str:
+    return os.environ["GREEN_API_ID_INSTANCE"]
 
 
-def _phone_number_id() -> str:
-    return os.environ["WHATSAPP_PHONE_NUMBER_ID"]
+def _api_token() -> str:
+    return os.environ["GREEN_API_TOKEN_INSTANCE"]
+
+
+def _method_url(method: str) -> str:
+    return f"{GREEN_API_BASE_URL}/waInstance{_id_instance()}/{method}/{_api_token()}"
+
+
+def _to_chat_id(phone_number: str) -> str:
+    """Green API wants 'chatId' like '923001234567@c.us', not a bare number."""
+    if "@" in phone_number:
+        return phone_number
+    digits = "".join(ch for ch in phone_number if ch.isdigit())
+    return f"{digits}@c.us"
 
 
 async def send_text(to: str, body: str) -> bool:
     """
-    Send a plain text WhatsApp message to a phone number.
+    Send a plain text WhatsApp message to a phone number via Green API.
     Returns True on success, False on failure.
-    Always returns — never raises — so a Meta outage doesn't
-    crash the webhook handler and cause Meta to retry forever.
+    Always returns — never raises — so an outage doesn't crash the
+    webhook handler and cause retries to pile up.
     """
-    url     = f"{WHATSAPP_API_URL}/{_phone_number_id()}/messages"
+    url     = _method_url("sendMessage")
     payload = {
-        "messaging_product": "whatsapp",
-        "to": to,
-        "type": "text",
-        "text": {"body": body},
+        "chatId": _to_chat_id(to),
+        "message": body,
     }
     try:
         async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.post(url, json=payload, headers=_headers())
+            resp = await client.post(url, json=payload)
             resp.raise_for_status()
             return True
     except Exception as e:
@@ -54,43 +63,33 @@ async def send_text(to: str, body: str) -> bool:
         return False
 
 
-async def get_media_url(media_id: str) -> str | None:
+async def get_media_url(download_url: str | None) -> str | None:
     """
-    Phase 2 — Younas.
+    Green API's incoming webhook already gives us the direct downloadUrl
+    for media messages (fileMessageData.downloadUrl) — unlike Meta, there's
+    no media_id-to-URL exchange call needed.
 
-    WhatsApp webhook payloads give us a media_id for image messages,
-    NOT the actual download URL. We must call Meta's media endpoint
-    first to get the real URL, then download separately.
-
-    Returns the download URL string, or None on failure.
+    This function just passes the URL through, kept only so main.py's
+    existing `await get_media_url(media_id)` call sites keep working
+    unchanged.
     """
-    url = f"{WHATSAPP_API_URL}/{media_id}"
-    try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.get(url, headers=_headers())
-            resp.raise_for_status()
-            return resp.json().get("url")
-    except Exception as e:
-        logger.error("get_media_url failed for media_id %s: %s", media_id, e)
-        return None
+    if download_url and download_url.startswith("http"):
+        return download_url
+    logger.error("get_media_url: no valid downloadUrl provided (%s)", download_url)
+    return None
 
 
 async def download_media_bytes(media_url: str) -> bytes | None:
     """
-    Phase 2 — Younas.
-
-    Downloads the actual image bytes from Meta's CDN.
-    The Authorization header is required here too — Meta CDN URLs
-    are not publicly accessible even though they look like normal URLs.
+    Downloads the actual file bytes from Green API's storage URL.
+    No Authorization header needed — Green API download URLs are
+    pre-signed and short-lived.
 
     Returns raw bytes, or None on failure.
     """
     try:
         async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.get(
-                media_url,
-                headers={"Authorization": f"Bearer {os.environ['WHATSAPP_TOKEN']}"},
-            )
+            resp = await client.get(media_url)
             resp.raise_for_status()
             return resp.content
     except Exception as e:
